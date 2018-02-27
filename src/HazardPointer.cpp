@@ -21,7 +21,7 @@ along with Semaphore.  If not, see <http://www.gnu.org/licenses/>. *
 #include <chrono>
 #include "HazardPointer.hpp"
 
-namespace bdias {
+namespace benedias {
     namespace concurrent {
 
 /// CollectorClientInterface state transitions
@@ -167,5 +167,5 @@ CollectorThread::~CollectorThread()
 }
 
 } // namespace concurrent
-} // namespace bdias
+} // namespace benedias
 

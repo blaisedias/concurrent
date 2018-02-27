@@ -4,8 +4,7 @@
 #include <chrono>
 #include "Semaphore.hpp"
 
-namespace bdias {
-    namespace concurrent {
+namespace benedias {
 
 class TestThread
 {
@@ -64,6 +63,8 @@ void testBinarySemaphore()
     start = std::chrono::system_clock::now();
     s.Wait(); puts("Waited on intially signalled binary semaphore");
     end = std::chrono::system_clock::now();
+    elapsed_seconds = end-start;
+    printf("%G\n", elapsed_seconds.count());
     if (elapsed_seconds.count() < 1)
         puts("Passed");
     else
@@ -81,12 +82,14 @@ void testBinarySemaphore()
     start = std::chrono::system_clock::now();
     s.Wait(); puts("Waited on multiply signalled binary semaphore");
     end = std::chrono::system_clock::now();
+    elapsed_seconds = end-start;
+    printf("%G\n", elapsed_seconds.count());
     if (elapsed_seconds.count() < 1)
         puts("Passed");
     else
         puts("Failed");
 
-    puts("Waiting again the same binary semaphore, execution should stop for about 10 secs");
+    puts("Waiting again on the same binary semaphore, execution should stop for about 10 secs");
     start = std::chrono::system_clock::now();
     BinarySemaphoreTest bt(&s);
     s.Wait(); puts("Waited on binary semaphore");
@@ -112,18 +115,18 @@ void testSemaphore()
     s.Wait(); puts("Waited on intially signalled semaphore");
     s.Wait(); puts("Waited again on intially signalled semaphore");
     end = std::chrono::system_clock::now();
+    elapsed_seconds = end-start;
+    printf("%G\n", elapsed_seconds.count());
     if (elapsed_seconds.count() < 1)
         puts("Passed");
     else
         puts("Failed");
-    elapsed_seconds = end-start;
-    printf("%G\n", elapsed_seconds.count());
 
-    puts("Waiting again the binary semaphore, execution should stop for about 10 secs, semaphore is signalled twice");
+    puts("Waiting again on the semaphore, execution should stop for about 10 secs, semaphore is signalled twice");
     start = std::chrono::system_clock::now();
     SemaphoreTest st(&s);
-    s.Wait(); puts("Waited on binary semaphore, signalled twice");
-    s.Wait(); puts("Waited on binary semaphore");
+    s.Wait(); puts("Waited on semaphore, signalled twice");
+    s.Wait(); puts("Waited on semaphore");
     end = std::chrono::system_clock::now();
     elapsed_seconds = end-start;
     printf("%G\n", elapsed_seconds.count());
@@ -135,12 +138,13 @@ void testSemaphore()
     st.join();
 }
 
-    } // namespace concurrent
-} //namespace bdias
+} //namespace benedias
 
 int main(int argc, char** argv)
 {
-    bdias::concurrent::testBinarySemaphore();
-    bdias::concurrent::testSemaphore();
+    puts("Testing Binary Semaphore\n========================");
+    benedias::testBinarySemaphore();
+    puts("\nTesting Semaphore\n=================");
+    benedias::testSemaphore();
     return 0;
 }

@@ -13,7 +13,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with Semaphore.  If not, see <http://www.gnu.org/licenses/>. *
+along with HazardPointer .  If not, see <http://www.gnu.org/licenses/>. *
 */
 
 #include <assert.h>
@@ -23,7 +23,7 @@ along with Semaphore.  If not, see <http://www.gnu.org/licenses/>. *
 #include <string>
 #include "HazardPointer.hpp"
 
-namespace bdias {
+namespace benedias {
     namespace concurrent {
 
 std::string* strings[10] {
@@ -113,7 +113,7 @@ void printhp(const HazardPointer<std::string>& hp)
         reinterpret_cast<void *>(hp()) << std::endl;
 }
 
-int test(HazardPointerList<std::string>& hplist, bool verbose=false)
+int test(HazardPointerList<std::string>& hplist, bool verbose=true)
 {
     {
         HazardPointer<std::string> hp0(hplist);
@@ -206,13 +206,13 @@ void t2()
 }
 
     } // namespace concurrent
-} // namespace bdias
+} // namespace benedias
 
 int main(int argc, char** argv)
 {
-    bdias::concurrent::t0();
-    bdias::concurrent::t1();
-    bdias::concurrent::t2();
+    benedias::concurrent::t0();
+    benedias::concurrent::t1();
+    benedias::concurrent::t2();
     return 0;
 }
 

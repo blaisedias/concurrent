@@ -31,8 +31,9 @@ along with Semaphore.  If not, see <http://www.gnu.org/licenses/>. *
 #include <stdexcept>
 #include <system_error>
 
-namespace bdias {
-    namespace concurrent {
+namespace benedias {
+
+#ifdef  USE_NATIVE_SEMAPHORES
 /// \class Semaphore
 /// Wrapper for counting semaphores c code.
 class Semaphore
@@ -109,7 +110,6 @@ class Semaphore
         }
 };
 
-#if 0
 // Wrapper for process local semaphores, behaviour approximates binary
 // semaphores.
 class BinarySemaphore :  public Semaphore
@@ -141,19 +141,87 @@ class BinarySemaphore :  public Semaphore
 
 #else 
 
-#define BS_OPTIMISED
+/// \class Semaphore
+/// Wrapper for counting semaphores c code.
+class Semaphore
+{
+    // 0 => unavailable, 1=> available
+    volatile int uword;
+
+    inline int futex_wake()
+    {
+        return syscall(SYS_futex, &uword, FUTEX_WAKE | FUTEX_PRIVATE_FLAG, 1,
+                       NULL, NULL, 0);
+    }
+
+    inline int futex_wait(int val)
+    {
+        return syscall(SYS_futex, &uword, FUTEX_WAKE | FUTEX_PRIVATE_FLAG,
+                val, NULL, NULL, 0);
+    }
+
+    public:
+    /// Default constructor, semaphore state is unsignalled.
+    Semaphore()
+    {
+        uword = 0;
+    }
+
+    /// Construct semaphore state with signalled count.
+    explicit Semaphore(int count)
+    {
+        uword = count;
+    }
+
+    virtual ~Semaphore()
+    {
+    }
+
+    void Post()
+    {
+        if (__atomic_add_fetch(&uword, 1, __ATOMIC_ACQ_REL) == 0)
+        {
+            futex_wake();
+        }
+    }
+
+    bool Wait()
+    {
+        // 2) We want to do futex_wait(v < 0)
+        // 2) But we also do want to be exposed to missed futex_wake
+        // !!!!!!!!!!! This code is incorrect
+        int v = __atomic_sub_fetch(&uword, 1, __ATOMIC_ACQ_REL);
+        if (v < 0)
+        {
+            futex_wait(v);
+        }
+        return true;
+    }
+
+    bool TryWait()
+    {
+        int expected;
+        __atomic_load(&uword, &expected, __ATOMIC_ACQUIRE);
+        if (expected > 0)
+        {
+            int desired = expected-1;
+            if(__atomic_compare_exchange_n(&uword, &expected, desired,
+                        false, __ATOMIC_ACQ_REL, __ATOMIC_CONSUME))
+                return true;
+        }
+        return false;
+    }
+};
+
 /// \class BinarySemaphore
 /// Implements binary semaphores using futexes,
-/// semantics are multiple post ops before a wait op
-/// are "merged" as a single post.
-/// Another way of expressing the behaviour is that a wait op consumes all
-/// by ALL preceding post ops that occured after the previous wait op.
+/// Semantics: a wait op consumes ALL preceding post ops,
+/// since the previous wait op (if any).
 class BinarySemaphore
 {
     enum {
         BS_UNAVAILABLE,
         BS_AVAILABLE,
-        BS_UNAVAIL_WAITING = -1,
     };
     // 0 => unavailable, 1=> available
     volatile int uword;
@@ -177,13 +245,6 @@ class BinarySemaphore
 
     void Post()
     {
-#ifdef  BS_OPTIMISED
-        if (__atomic_sub_fetch(&uword, 1,  __ATOMIC_ACQ_REL) < BS_AVAILABLE)
-        {
-            __atomic_store_n(&uword, BS_AVAILABLE, __ATOMIC_RELEASE);
-            futex_wake();
-        }
-#else
         int expected = BS_UNAVAILABLE;
         if (__atomic_compare_exchange_n(&uword, &expected, BS_AVAILABLE,
                     false, __ATOMIC_ACQ_REL, __ATOMIC_CONSUME))
@@ -192,7 +253,6 @@ class BinarySemaphore
         }
         else
             assert(expected == BS_AVAILABLE);
-#endif
     }
 
     bool Wait()
@@ -201,27 +261,9 @@ class BinarySemaphore
         while (!__atomic_compare_exchange_n(&uword, &expected, BS_UNAVAILABLE,
                     false, __ATOMIC_ACQ_REL, __ATOMIC_CONSUME))
         {
-#ifdef  BS_OPTIMISED
-            if (expected == BS_UNAVAILABLE)
-            {
-                if (!__atomic_compare_exchange_n(&uword, &expected, BS_UNAVAIL_WAITING,
-                    false, __ATOMIC_ACQ_REL, __ATOMIC_CONSUME))
-                {
-                    futex_wait(BS_UNAVAILABLE);
-                }
-            }
-            else
-            {
-                assert(expected == BS_UNAVAIL_WAITING);
-                futex_wait(BS_UNAVAIL_WAITING);
-            }
-
-#else
-            futex_wait(BS_UNAVAILABLE);
-#endif
+            futex_wait(expected);
             expected = BS_AVAILABLE;
         }
-
         return true;
     }
 
@@ -234,8 +276,7 @@ class BinarySemaphore
         return false;
     }
 };
-
-} // namspace concurrent
-} // namespace bdias
 #endif
+
+} // namespace benedias
 #endif  // _SEMAPHORE_HPP_INCLUDED
