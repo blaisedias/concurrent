@@ -164,7 +164,7 @@ class fu_read_modifiable_lock
     fu_read_modifiable_lock & operator=(const fu_read_modifiable_lock &) = delete;
     fu_read_modifiable_lock (fu_read_modifiable_lock  const&) = delete;
 
-    // Non move assigable
+    // Non move assignable
     fu_read_modifiable_lock & operator=(fu_read_modifiable_lock &&) = delete;
 
     fu_read_modifiable_lock(futex_rw_control* rwcontrol):control(rwcontrol) {}
