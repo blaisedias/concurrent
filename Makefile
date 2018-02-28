@@ -20,17 +20,17 @@ endif
 
 DEFS =
 SRC = src
-INCS = src
+INCLUDES = -I src
 TESTSRC = test/src
 BIN = bin
 OD = obj
 LIBS = -lboost_filesystem -lboost_system -lboost_serialization -ltag -lpthread $(TARG_LIBS)
 GD = ./Makefile
-CF = -std=c++11 -Wall -g $(TARG_CF) $(DEFS)
+CF = -std=c++14 -Wall -g $(TARG_CF) $(DEFS)
 
 OBJS = 	
 
-all: $(BIN)/hptest2 $(BIN)/semtest
+all: $(BIN)/hptest2 $(BIN)/SemTest $(BIN)/thread_test $(BIN)/semaphore_test
 
 .PHONY: clean
 
@@ -38,22 +38,49 @@ clean:
 	rm -f $(OD)/*
 	rm -f $(BIN)/*
 
-$(OD)/%.o: $(SRC)/%.cpp
-	g++ $(CF) -I $(INCS) -c -o $(@) $< 
+#{
+Makefile.deps: $(SRC)/* $(TESTSRC)/*
+	./mkdeps.py $(SRC) $(TESTSRC) -o '$(OD)'
+	touch Makefile.deps
 
-$(OD)/HazardPointer.o: $(SRC)/HazardPointer.cpp $(SRC)/HazardPointer.hpp $(SRC)/Semaphore.hpp
-	g++ $(CF) -c -o $(@) $< 
+include Makefile.deps
+#}
+# Alternative makefile way of doing above.
+#
+#https://www.gnu.org/software/make/manual/make.html#Automatic-Prerequisites
+#%.d: %.c
+#        @set -e; rm -f $@; \
+#         $(CC) -M $(CPPFLAGS) $< > $@.$$$$; \
+#         sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; \
+#         rm -f $@.$$$$
+#
+#include $(sources:.c=.d)
+#
+$(OD)/%.o: $(SRC)/%.cpp $(GD)
+	g++ $(CF) -c -o $(@) $< $(INCLUDES)
+
+$(OD)/%.o: $(SRC)/%.c $(GD)
+	g++ $(CF) -c -o $(@) $< $(INCLUDES)
+
+$(OD)/%.o: $(TESTSRC)/%.cpp $(GD)
+	g++ $(CF) -c -o $(@) $< $(INCLUDES)
+
+$(OD)/%.o: $(TESTSRC)/%.c $(GD)
+	g++ $(CF) -c -o $(@) $< $(INCLUDES)
+
 
 $(BIN)/hptest2: $(OD)/hptest2.o $(OD)/HazardPointer.o
-	g++ $(CF) -o $(BIN)/hptest2 $^ $(LIBDIRS) $(LIBS)
-
-$(OD)/hptest2.o: $(TESTSRC)/hptest2.cpp $(SRC)/HazardPointer.hpp $(SRC)/Semaphore.hpp
-	g++ $(CF) -I $(INCS) -c -o $(@) $< 
+	g++ $(CF) -o $(@) $^ $(LIBDIRS) $(LIBS)
 
 
-$(BIN)/semtest: $(OD)/semtest.o
-	g++ $(CF) -o $(BIN)/semtest $^ $(LIBDIRS) $(LIBS)
+$(BIN)/SemTest: $(OD)/SemTest.o
+	g++ $(CF) -o $(@) $^ $(LIBDIRS) $(LIBS)
 
-$(OD)/semtest.o: $(TESTSRC)/semtest.cpp $(SRC)/Semaphore.hpp
-	g++ $(CF) -I $(INCS) -c -o $(@) $< 
+
+$(BIN)/thread_test: $(OD)/thread_test.o $(OD)/rwlocktest2.o $(OD)/pilocktest.o \
+	$(OD)/bdrwlock.o $(OD)/bdfutex.o $(OD)/bdlock.o 
+	g++ $(CF) -o $(@) $^ $(LIBDIRS) $(LIBS)
+
+$(BIN)/semaphore_test:  $(OD)/semaphore_test.o $(OD)/semaphore.o $(OD)/bdfutex.o 
+	g++ $(CF) -o $(@) $^ $(LIBDIRS) $(LIBS)
 
