@@ -22,6 +22,7 @@ based on
 1) "Fast Userspace Read/Write locks, built on top of mutexes. Paul Mackerras and Rusty Russel."
 2) "Futexes are tricky by Ulrich Drepper"
 */
+#include <iostream>
 #include <stdexcept>
 #include <atomic>
 #include <climits>
@@ -32,6 +33,7 @@ static const bool futex_assert_on_error = true;
 
 #include "bdfutex.h"
 #include "bdrwlock.h"
+#include "stacktrace.h"
 
 namespace benedias {
 const bool verbose = false;
@@ -238,6 +240,24 @@ void futex_rw_control::write_modify()
             futex_wait(&nreaders, val_nreaders, _fn_err_txt);
             __atomic_load(&nreaders, &val_nreaders, __ATOMIC_CONSUME);
         }while(val_nreaders >= 0);
+    }
+}
+
+futex_rw_control::~futex_rw_control()
+{
+    static const char* _fn_err_txt = " ~futex_rw_control";
+    if (nreaders)
+    {
+        std::cerr << _fn_err_txt << " readers count is not 0 " << std::endl;
+        print_stacktrace();
+        abort();
+    }
+
+    if (!try_enter_gate(&gate, _fn_err_txt))
+    {
+        std::cerr << _fn_err_txt << " writer active " << std::endl;
+        print_stacktrace();
+        abort();
     }
 }
 

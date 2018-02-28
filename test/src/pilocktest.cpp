@@ -32,6 +32,7 @@ using namespace std::chrono_literals;
 
 static std::vector<int> gv={1,2,3,4,5};
 static fu_lock          gv_lock;
+static volatile bool run_test_threads = false;
 
 struct lck_args {
     bool run = true;
@@ -79,7 +80,7 @@ struct lck_args {
 static void reader(lck_args& args)
 {
     std::this_thread::sleep_for(1s);
-    while(args.run && (++args.read_iterations < args.max_iterations))
+    while(run_test_threads && (++args.read_iterations < args.max_iterations))
     {
         {
             std::lock_guard<fu_lock> lg(gv_lock);
@@ -87,12 +88,11 @@ static void reader(lck_args& args)
         }
         std::this_thread::yield();
     }
-    args.run = false;
 }
 
 static void writer(lck_args& args)
 {
-    while(args.run && (++args.write_iterations < args.max_iterations))
+    while(run_test_threads && (++args.write_iterations < args.max_iterations))
     {
         {
             std::lock_guard<fu_lock> lg(gv_lock);
@@ -100,7 +100,6 @@ static void writer(lck_args& args)
         }
         std::this_thread::sleep_for(1000us);
     }
-    args.run = false;
 }
 
 void lock_test()
@@ -115,10 +114,6 @@ void lock_test()
     {
         reader_args.emplace_back(lck_args());
     }
-    for(auto &arg : reader_args)
-    {
-        readers.emplace_back(std::thread(reader, std::ref(arg)));
-    }
 
     for(auto i=0; i < 4; i++)
     {
@@ -126,19 +121,27 @@ void lock_test()
     }
     writer_args[1].inc = false;
     writer_args[3].inc = false;
+
+    run_test_threads = true;
+    auto start = std::chrono::high_resolution_clock::now();
+    for(auto &arg : reader_args)
+    {
+        readers.emplace_back(std::thread(reader, std::ref(arg)));
+    }
     for(auto &arg : writer_args)
     {
         writers.emplace_back(std::thread(writer, std::ref(arg)));
     }
     std::this_thread::sleep_for(10s);
-    for(auto &arg : reader_args)
-        arg.run = false;
-    for(auto &arg : writer_args)
-        arg.run = false;
+    run_test_threads = false;
     for(auto &th : writers)
         th.join();
     for(auto &th : readers)
         th.join();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> elapsed = end-start;
+    std::cout << " Elapsed " << elapsed.count() << " ms\n";
 
     std::cout << "Concurrently accessed/modified vector size :" << gv.size() << std::endl;
     std::cout << "Reader iterations:" << std::endl;

@@ -20,6 +20,7 @@ along with this file.  If not, see <http://www.gnu.org/licenses/>.
 #include <vector>
 #include <chrono>
 #include <climits>
+#include <thread>
 #include <mutex>
 
 #include <assert.h>
@@ -34,9 +35,9 @@ using namespace std::chrono_literals;
 
 static std::vector<int> gv={1,2,3,4,5};
 static fu_rw_lock    gv_lock;
+static volatile bool test_running = false;
 
 struct rw_args {
-    bool run = true;
     unsigned int read_iterations = 0;
     unsigned int write_iterations = 0;
     unsigned int iterations = 0;
@@ -81,7 +82,7 @@ struct rw_args {
 static void reader(rw_args& args)
 {
     std::this_thread::sleep_for(1s);
-    while(args.run && (++args.read_iterations < args.max_iterations))
+    while(test_running && (++args.read_iterations < args.max_iterations))
     {
         {
             std::lock_guard<fu_read_lock> lg(gv_lock);
@@ -89,12 +90,11 @@ static void reader(rw_args& args)
         }
         std::this_thread::yield();
     }
-    args.run = false;
 }
 
 static void writer(rw_args& args)
 {
-    while(args.run && (++args.write_iterations < args.max_iterations))
+    while(test_running && (++args.write_iterations < args.max_iterations))
     {
         {
             std::lock_guard<fu_write_lock> lg(gv_lock);
@@ -102,13 +102,12 @@ static void writer(rw_args& args)
         }
         std::this_thread::sleep_for(1000us);
     }
-    args.run = false;
 }
 
 static void m_writer(rw_args& args)
 {
     std::this_thread::sleep_for(1s);
-    while(args.run && (args.read_iterations < args.max_iterations))
+    while(test_running && (args.read_iterations < args.max_iterations))
     {
         {
             fu_read_modifiable_lock rmwlock = gv_lock.make_modifiable_lock();
@@ -127,14 +126,13 @@ static void m_writer(rw_args& args)
         }
         std::this_thread::sleep_for(1000us);
     }
-    args.run = false;
 }
 
 
 static void reader_writer(rw_args& args)
 {
     std::this_thread::sleep_for(1s);
-    while(args.run && (args.read_iterations < args.max_iterations))
+    while(test_running && (args.read_iterations < args.max_iterations))
     {
         bool write_pending = (0 == (args.read_iterations % 101));
         {
@@ -169,7 +167,6 @@ static void reader_writer(rw_args& args)
         }
         std::this_thread::yield();
     }
-    args.run = false;
 }
 
 
@@ -187,43 +184,44 @@ void rwlock_rmw_test2()
     {
         reader_args.emplace_back(rw_args());
     }
-    for(auto &arg : reader_args)
-    {
-        readers.emplace_back(std::thread(reader, std::ref(arg)));
-    }
 
     for(auto i=0; i < 10; i++)
     {
         reader_writer_args.emplace_back(rw_args());
     }
-    for(auto &arg : reader_writer_args)
-    {
-        reader_writers.emplace_back(std::thread(reader_writer, std::ref(arg)));
-    }
-
     for(auto i=0; i < 4; i++)
     {
         writer_args.emplace_back(rw_args());
     }
     writer_args[1].inc = false;
     writer_args[3].inc = false;
+
+    test_running = true;
+    auto start = std::chrono::high_resolution_clock::now();
+    for(auto &arg : reader_args)
+    {
+        readers.emplace_back(std::thread(reader, std::ref(arg)));
+    }
+    for(auto &arg : reader_writer_args)
+    {
+        reader_writers.emplace_back(std::thread(reader_writer, std::ref(arg)));
+    }
     for(auto &arg : writer_args)
     {
         writers.emplace_back(std::thread(writer, std::ref(arg)));
     }
     std::this_thread::sleep_for(10s);
-    for(auto &arg : reader_args)
-        arg.run = false;
-    for(auto &arg : writer_args)
-        arg.run = false;
-    for(auto &arg : reader_writer_args)
-        arg.run = false;
+    test_running = false;
     for(auto &th : writers)
         th.join();
     for(auto &th : readers)
         th.join();
     for(auto &th : reader_writers)
         th.join();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> elapsed = end-start;
+    std::cout << " Elapsed " << elapsed.count() << " ms\n";
 
     std::cout << "Concurrently accessed/modified vector size :" << gv.size() << std::endl;
     std::cout << "Reader iterations:" << std::endl;
@@ -274,30 +272,33 @@ void rwlock_test2()
     {
         reader_args.emplace_back(rw_args());
     }
-    for(auto &arg : reader_args)
-    {
-        readers.emplace_back(std::thread(reader, std::ref(arg)));
-    }
-
     for(auto i=0; i < 4; i++)
     {
         writer_args.emplace_back(rw_args());
     }
     writer_args[1].inc = false;
     writer_args[3].inc = false;
+
+    test_running = true;
+    auto start = std::chrono::high_resolution_clock::now();
+    for(auto &arg : reader_args)
+    {
+        readers.emplace_back(std::thread(reader, std::ref(arg)));
+    }
     for(auto &arg : writer_args)
     {
         writers.emplace_back(std::thread(writer, std::ref(arg)));
     }
     std::this_thread::sleep_for(10s);
-    for(auto &arg : reader_args)
-        arg.run = false;
-    for(auto &arg : writer_args)
-        arg.run = false;
+    test_running = false;
     for(auto &th : writers)
         th.join();
     for(auto &th : readers)
         th.join();
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> elapsed = end-start;
+    std::cout << " Elapsed " << elapsed.count() << " ms\n";
 
     std::cout << "Concurrently accessed/modified vector size :" << gv.size() << std::endl;
     std::cout << "Reader iterations:" << std::endl;
@@ -332,10 +333,6 @@ void rwlock_mw_test2()
     {
         reader_args.emplace_back(rw_args());
     }
-    for(auto &arg : reader_args)
-    {
-        readers.emplace_back(std::thread(reader, std::ref(arg)));
-    }
 
     for(auto i=0; i < 4; i++)
     {
@@ -343,19 +340,28 @@ void rwlock_mw_test2()
     }
     writer_args[1].inc = false;
     writer_args[3].inc = false;
+
+    test_running = true;
+    auto start = std::chrono::high_resolution_clock::now();
+    for(auto &arg : reader_args)
+    {
+        readers.emplace_back(std::thread(reader, std::ref(arg)));
+    }
     for(auto &arg : writer_args)
     {
         writers.emplace_back(std::thread(m_writer, std::ref(arg)));
     }
     std::this_thread::sleep_for(10s);
-    for(auto &arg : reader_args)
-        arg.run = false;
-    for(auto &arg : writer_args)
-        arg.run = false;
+    test_running = false;
     for(auto &th : writers)
         th.join();
     for(auto &th : readers)
         th.join();
+
+
+    auto end = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> elapsed = end-start;
+    std::cout << " Elapsed " << elapsed.count() << " ms\n";
 
     std::cout << "Concurrently accessed/modified vector size :" << gv.size() << std::endl;
     std::cout << "Reader iterations:" << std::endl;

@@ -33,12 +33,6 @@ along with sqzbsrv.  If not, see <http://www.gnu.org/licenses/>.
 #include <assert.h>
 #include "semaphore.hpp"
 
-#include "dbstring.h"
-#include "dbstring_boost_serialization.h"
-
-using benedias::memdb::dbstring;
-using benedias::memdb::dbstring_iterator;
-using benedias::sharedobj_ptr;
 using std::string;
 using namespace std::chrono_literals;
 
@@ -125,3 +119,8 @@ void bs_test()
     th2.join();
 }
 
+int main(int argc, char* argv[])
+{
+    bs_test();
+    std::cout << "--------------------" << std::endl;
+}
